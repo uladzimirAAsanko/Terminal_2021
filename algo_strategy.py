@@ -24,13 +24,11 @@ class AlgoStrategy(gamelib.AlgoCore):
         super().__init__()
         seed = random.randrange(maxsize)
         random.seed(seed)
-        gamelib.debug_write('Random seed: {}'.format(seed))
 
     def on_game_start(self, config):
         """ 
         Read in config and perform any initial setup here 
         """
-        gamelib.debug_write('Configuring your custom algo strategy...')
         self.config = config
         global WALL, SUPPORT, TURRET, SCOUT, DEMOLISHER, INTERCEPTOR, MP, SP, OUR_FIELD, ARR_FIELD
         WALL = config["unitInformation"][0]["shorthand"]
@@ -39,18 +37,22 @@ class AlgoStrategy(gamelib.AlgoCore):
         SCOUT = config["unitInformation"][3]["shorthand"]
         DEMOLISHER = config["unitInformation"][4]["shorthand"]
         INTERCEPTOR = config["unitInformation"][5]["shorthand"]
-        ARR_FIELD = [1000] * 27
-        for i in range(27):
-            ARR_FIELD[i] = [1000] * 27
-        for i in range(14):
-            for j in range(i):
+        ARR_FIELD = [1000] * 28
+        for i in range(28):
+            ARR_FIELD[i] = [1000] * 28
+        for i in range(0, 14):
+            j = 0
+            while j <= i:
                 ARR_FIELD[13 - j][i] = 0
                 ARR_FIELD[14 + j][i] = 0
+                j += 1
         OUR_FIELD = []
         for i in range(14):
-            for j in range(i):
+            j = 0
+            while j <= i:
                 OUR_FIELD.append([13 - j, i])
-                OUR_FIELD.append([14 + j, j])
+                OUR_FIELD.append([14 + j, i])
+                j += 1
         MP = 1
         SP = 0
         # This is a good place to do initial setup
@@ -74,29 +76,57 @@ class AlgoStrategy(gamelib.AlgoCore):
 
     def mark_def_point(self, game_state, turrets_placed):
         for turret in turrets_placed:
-            gamelib.debug_write(str(turret))
             self.mark_around_turrel(game_state, turret)
 
     def mark_around_turrel(self, game_state, location):
         if not gamelib.game_map.GameMap.in_arena_bounds(game_state.game_map, location):
             return False
-        for i in range(27):
-            gamelib.debug_write( str(ARR_FIELD[i]))
         ARR_FIELD[location[0]][location[1]] += 1
         location_in_range = game_state.game_map.get_locations_in_range(location, 3.5)
         for loco in location_in_range:
             ARR_FIELD[loco[0]][loco[1]] += 1
         return True
 
-    def choose_best_tower_loco(self, game_state):
+    def build_neeeded_walls(self, game_state, walls_placed, turrets_placed):
+        if len(walls_placed) >= len(turrets_placed):
+            return True
+        missed_walls = []
+        for turret in turrets_placed:
+            try:
+                walls_placed.index([turret[0] + 1, turret[1]+1])
+                walls_placed.index([turret[0] - 1, turret[1]+1])
+            except ValueError:
+                missed_walls.append([turret[0] + 1, turret[1]+1])
+                missed_walls.append([turret[0] - 1, turret[1]+1])
+        #TODO Make priority of making walls by hp of turret
+        game_state.attempt_spawn(WALL, missed_walls)
+        return game_state.attempt_upgrade(missed_walls)
+
+
+    def get_less_defended_rating(self):
         minimal_vage = 100
-        for i in range(27):
-            if minimal_vage < ARR_FIELD[i][12]:
+        for i in range(28):
+            if minimal_vage > ARR_FIELD[i][12]:
                 minimal_vage = ARR_FIELD[i][12]
+        return minimal_vage
+
+    def choose_best_tower_loco(self, game_state, ):
+        minimal_vage = self.get_less_defended_rating()
         best_loco = []
-        for i in range(27):
+        for i in range(28):
             if minimal_vage == ARR_FIELD[i][12]:
                 best_loco.append([i, 12])
+        #TODO Remove try block, bug cause of wrong ARR_FIELD some param
+        try:
+            best_one = self.choose_best_var(game_state, best_loco)
+            while not gamelib.game_map.GameMap.in_arena_bounds(game_state.game_map, best_one):
+                best_loco.remove(best_one)
+                best_one = self.choose_best_var(game_state, best_loco)
+        except IndexError:
+            best_one = [-1, -1]
+        return best_one
+
+    def choose_best_var(self, game_state, best_loco):
         sum_of_points = []
         for location in best_loco:
             location_in_range = game_state.game_map.get_locations_in_range(location, 3.5)
@@ -106,7 +136,7 @@ class AlgoStrategy(gamelib.AlgoCore):
                 if gamelib.game_map.GameMap.in_arena_bounds(game_state.game_map, loco):
                     sum_of_loco += ARR_FIELD[loco[0]][loco[1]]
                     count_of_parts += 1
-            sum_of_points.append(sum_of_loco/count_of_parts)
+            sum_of_points.append(sum_of_loco / count_of_parts)
         max_sum = 0
         index = 0
         for sum in sum_of_points:
@@ -114,12 +144,29 @@ class AlgoStrategy(gamelib.AlgoCore):
                 index = sum_of_points.index(sum)
                 max_sum = sum
         return best_loco[index]
-
-
     """
     NOTE: All the methods after this point are part of the sample starter-algo
     strategy and can safely be replaced for your custom algo.
     """
+    def choose_place_of_support(self, game_state, support_location):
+        #TODO POLNAYA_XUYNYA PEREPISAT'
+        x_range = []
+        for i in range(9,18):
+            x_range.append(i)
+        current_y = 10
+        while current_y != 12:
+            for i in range(5):
+                try:
+                    support_location.index([13 - i, current_y])
+                except ValueError:
+                    return [13 - i, current_y]
+                try:
+                    support_location.index([14 + i, current_y])
+                except ValueError:
+                    return [14 + i, current_y]
+            current_y += 1
+            return [9,10]
+
 
     def starter_strategy(self, game_state):
         """
@@ -148,22 +195,37 @@ class AlgoStrategy(gamelib.AlgoCore):
                 else:
                     walls_placed.append(location)
         self.mark_def_point(game_state, turrels_placed)
-
-        # If the turn is less than 5, stall with interceptors and wait to see enemy's base
-
-        best_loco = self.choose_best_tower_loco(game_state)
-        if game_state.SP >= 8:
-            game_state.attempt_spawn(TURRET, best_loco)
-            game_state.attempt_upgrade(best_loco)
-            best_loco[1] += 1
-            game_state.attempt_spawn(WALL, best_loco)
-            game_state.attempt_upgrade(best_loco)
+        if self.get_less_defended_rating() != 0 :
+            self.build_neeeded_walls(game_state, walls_placed, turrels_placed)
         else:
             game_state.attempt_spawn(INTERCEPTOR, [22, 8], 2)
             game_state.attempt_spawn(INTERCEPTOR, [5, 8], 2)
-        if game_state.MP >= 9:
-            game_state.attempt_spawn(DEMOLISHER, [23, 9], 3)
+        # If the turn is less than 5, stall with interceptors and wait to see enemy's base
 
+        while game_state.get_resource(SP) >= 10:
+            best_loco = self.choose_best_tower_loco(game_state)
+            if best_loco[0] == -1:
+                break
+            game_state.attempt_spawn(TURRET, best_loco)
+            game_state.attempt_upgrade(best_loco)
+            self.place_walls_close_to_turrles(game_state, best_loco)
+        if game_state.get_resource(SP) >= 11:
+            supports_place = self.choose_place_of_support(game_state, supports_placed)
+            game_state.attempt_spawn(SUPPORT, supports_place)
+            game_state.attempt_upgrade(supports_place)
+
+        if game_state.get_resource(MP) >= 9:
+            self.demolisher_line_strategy(game_state)
+
+
+    def place_walls_close_to_turrles(self, game_state, turret):
+        turret[1] += 1
+        turret[0] += 1
+        game_state.attempt_spawn(WALL, turret)
+        game_state.attempt_upgrade(turret)
+        turret[0] -= 2
+        game_state.attempt_spawn(WALL, turret)
+        game_state.attempt_upgrade(turret)
 
 
     def build_defences(self, game_state):
@@ -176,7 +238,7 @@ class AlgoStrategy(gamelib.AlgoCore):
 
         # Place turrets that attack enemy units
         turret_locations = [[3, 12], [14, 12], [24, 12]]
-        wall_locations = [[3, 13], [14, 13], [24, 13]]
+        wall_locations = [[2, 13], [4, 13], [15, 13], [13, 13], [23, 13], [25, 13]]
         support_locations = [[9, 10], [18, 10]]
         # attempt_spawn will try to spawn units if we have resources, and will check if a blocking unit is already there
         game_state.attempt_spawn(TURRET, turret_locations)
@@ -185,9 +247,9 @@ class AlgoStrategy(gamelib.AlgoCore):
         # Place walls in front of turrets to soak up damage for them
         game_state.attempt_spawn(WALL, wall_locations)
         # upgrade walls so they soak more damage
-        game_state.attempt_upgrade(wall_locations)
         game_state.attempt_upgrade(support_locations)
         game_state.attempt_upgrade(turret_locations)
+
 
     def build_reactive_defense(self, game_state):
         """
@@ -238,12 +300,10 @@ class AlgoStrategy(gamelib.AlgoCore):
 
         # Now let's build out a line of stationary units. This will prevent our demolisher from running into the enemy base.
         # Instead they will stay at the perfect distance to attack the front two rows of the enemy base.
-        for x in range(27, 5, -1):
-            game_state.attempt_spawn(cheapest_unit, [x, 11])
 
         # Now spawn demolishers next to the line
         # By asking attempt_spawn to spawn 1000 units, it will essentially spawn as many as we have resources for
-        game_state.attempt_spawn(DEMOLISHER, [24, 10], 1000)
+        game_state.attempt_spawn(DEMOLISHER, [20, 6], 1000)
 
     def least_damage_spawn_location(self, game_state, location_options):
         """
@@ -295,19 +355,6 @@ class AlgoStrategy(gamelib.AlgoCore):
         Processing the action frames is complicated so we only suggest it if you have time and experience.
         Full doc on format of a game frame at in json-docs.html in the root of the Starterkit.
         """
-        # Let's record at what position we get scored on
-        state = json.loads(turn_string)
-        events = state["events"]
-        breaches = events["breach"]
-        for breach in breaches:
-            location = breach[0]
-            unit_owner_self = True if breach[4] == 1 else False
-            # When parsing the frame data directly, 
-            # 1 is integer for yourself, 2 is opponent (StarterKit code uses 0, 1 as player_index instead)
-            if not unit_owner_self:
-                gamelib.debug_write("Got scored on at: {}".format(location))
-                self.scored_on_locations.append(location)
-                gamelib.debug_write("All locations: {}".format(self.scored_on_locations))
 
 
 if __name__ == "__main__":
