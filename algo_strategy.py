@@ -124,7 +124,7 @@ class AlgoStrategy(gamelib.AlgoCore):
     def get_most_defended_x(self, curr_y):
         maximal_vage = -1
         for i in range(28):
-            if maximal_vage < PROTECTED_FIELD[i][curr_y] < 500:
+            if maximal_vage < PROTECTED_FIELD[i][curr_y] < 500 and STRUCT_FIELD[i][curr_y] == 0:
                 maximal_vage = PROTECTED_FIELD[i][curr_y]
         return maximal_vage
 
@@ -146,8 +146,8 @@ class AlgoStrategy(gamelib.AlgoCore):
         sum_of_points = []
         for location in best_loco:
             location_in_range = game_state.game_map.get_locations_in_range(location, 3.5)
-            sum_of_loco = 0
-            count_of_parts = 0
+            sum_of_loco = 1
+            count_of_parts = 1
             for loco in location_in_range:
                 sum_of_loco += PROTECTED_FIELD[loco[0]][loco[1]]
                 count_of_parts += 1
@@ -155,12 +155,12 @@ class AlgoStrategy(gamelib.AlgoCore):
                 sum_of_points.append(1000)
             else:
                 sum_of_points.append(sum_of_loco / count_of_parts)
-        min_sum = 1000
+        min_sim = 1000
         index = 0
         for sum in sum_of_points:
-            if min_sum > sum:
+            if min_sim > sum:
                 index = sum_of_points.index(sum)
-                min_sum = sum
+                min_sim = sum
         return best_loco[index]
     """
     NOTE: All the methods after this point are part of the sample starter-algo
@@ -198,7 +198,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         best_loco = []
         for i in range(28):
             if rate == PROTECTED_FIELD[i][curr_y]:
-                best_loco.append([i, rate])
+                best_loco.append([i, curr_y])
         return best_loco
 
     def starter_strategy(self, game_state):
@@ -238,22 +238,18 @@ class AlgoStrategy(gamelib.AlgoCore):
             game_state.attempt_spawn(INTERCEPTOR, [5, 8], 2)
         # If the turn is less than 5, stall with interceptors and wait to see enemy's base
 
-        while game_state.get_resource(SP) >= 10:
-            sp_in_start_round = game_state.get_resource(SP)
-            best_loco = self.choose_best_tower_loco(game_state)
-            if best_loco[0] == -1:
-                break
+        best_loco = self.choose_best_tower_loco(game_state)
+        if game_state.get_resource(SP) >= 10 and best_loco[0] != -1:
             self.spawn_and_mark(game_state, best_loco, TURRET)
             self.upgrade_and_mark(game_state, best_loco, TURRET)
             self.place_walls_close_to_turrles(game_state, best_loco)
-            if sp_in_start_round == game_state.get_resource(SP):
-                break
+
 
         if game_state.get_resource(SP) >= 13:
             support_loco = self.choose_place_of_support(game_state)
             self.spawn_and_mark(game_state, support_loco, SUPPORT)
             self.upgrade_and_mark(game_state, support_loco, SUPPORT)
-            wall_loco = [[[support_loco[0] + 1], [support_loco[1]]], [[support_loco[0] - 1], [support_loco[1]]]]
+            wall_loco = [[support_loco[0] + 1, support_loco[1]], [support_loco[0] - 1, support_loco[1]]]
             self.spawn_and_mark(game_state, wall_loco, WALL)
             self.upgrade_and_mark(game_state, wall_loco, WALL)
 
@@ -277,8 +273,6 @@ class AlgoStrategy(gamelib.AlgoCore):
         return existing_unit.upgraded
 
     def make_false_array_real(self, array):
-        gamelib.util.debug_write("In make false real")
-        gamelib.util.debug_write(array)
         real_array = []
         try:
             for unit in array:
@@ -310,17 +304,13 @@ class AlgoStrategy(gamelib.AlgoCore):
                 STRUCT_FIELD[unit[0]][unit[1]] = regular_cost
 
     def spawn_and_mark(self, game_state, unit_array, unit_type):
-        gamelib.util.debug_write("In spawn and mark")
         real_array = self.make_false_array_real(unit_array)
-        gamelib.util.debug_write(real_array)
         for unit in real_array:
             if game_state.attempt_spawn(unit_type, unit) > 1:
                 self.map_units(game_state, unit, unit_type)
 
     def upgrade_and_mark(self, game_state, unit_array, unit_type):
-        gamelib.util.debug_write("In upgrade and mark")
         real_array = self.make_false_array_real(unit_array)
-        gamelib.util.debug_write(real_array)
         for unit in real_array:
             if game_state.attempt_upgrade(unit) > 0:
                 self.map_units(game_state, unit, unit_type)
