@@ -30,21 +30,22 @@ class AlgoStrategy(gamelib.AlgoCore):
         Read in config and perform any initial setup here 
         """
         self.config = config
-        global WALL, SUPPORT, TURRET, SCOUT, DEMOLISHER, INTERCEPTOR, MP, SP, OUR_FIELD, ARR_FIELD
+        global WALL, SUPPORT, TURRET, SCOUT, DEMOLISHER, INTERCEPTOR, MP, SP, OUR_FIELD, PROTECTED_FIELD, STRUCT_FIELD
         WALL = config["unitInformation"][0]["shorthand"]
         SUPPORT = config["unitInformation"][1]["shorthand"]
         TURRET = config["unitInformation"][2]["shorthand"]
         SCOUT = config["unitInformation"][3]["shorthand"]
         DEMOLISHER = config["unitInformation"][4]["shorthand"]
         INTERCEPTOR = config["unitInformation"][5]["shorthand"]
-        ARR_FIELD = [1000] * 28
+
+        PROTECTED_FIELD = [1000] * 28
         for i in range(28):
-            ARR_FIELD[i] = [1000] * 28
+            PROTECTED_FIELD[i] = [1000] * 28
         for i in range(0, 14):
             j = 0
             while j <= i:
-                ARR_FIELD[13 - j][i] = 0
-                ARR_FIELD[14 + j][i] = 0
+                PROTECTED_FIELD[13 - j][i] = 0
+                PROTECTED_FIELD[14 + j][i] = 0
                 j += 1
         OUR_FIELD = []
         for i in range(14):
@@ -53,7 +54,19 @@ class AlgoStrategy(gamelib.AlgoCore):
                 OUR_FIELD.append([13 - j, i])
                 OUR_FIELD.append([14 + j, i])
                 j += 1
-        MP = 1
+
+
+        STRUCT_FIELD = [-100] * 28
+        for i in range(28):
+            STRUCT_FIELD[i] = [-100] * 28
+        for i in range(0, 14):
+            j = 0
+            while j <= i:
+                STRUCT_FIELD[13 - j][i] = 0
+                STRUCT_FIELD[14 + j][i] = 0
+                j += 1
+
+        MP = 0
         SP = 0
         # This is a good place to do initial setup
 
@@ -83,7 +96,7 @@ class AlgoStrategy(gamelib.AlgoCore):
             return False
         location_in_range = game_state.game_map.get_locations_in_range(location, 3.5)
         for loco in location_in_range:
-            ARR_FIELD[loco[0]][loco[1]] += 1
+            PROTECTED_FIELD[loco[0]][loco[1]] += 1
         return True
 
     def build_neeeded_walls(self, game_state, walls_placed, turrets_placed):
@@ -96,23 +109,23 @@ class AlgoStrategy(gamelib.AlgoCore):
             except ValueError:
                 missed_walls.append([turret[0], turret[1]+1])
         #TODO Make priority of making walls by hp of turret
-        game_state.attempt_spawn(WALL, missed_walls)
-        return game_state.attempt_upgrade(missed_walls)
+        self.spawn_and_mark(game_state, missed_walls, WALL)
+        self.upgrade_and_mark(game_state, missed_walls, WALL)
 
 
     def get_less_defended_rating(self):
         minimal_vage = 100
         curr_y = 11
         for i in range(28):
-            if minimal_vage > ARR_FIELD[i][curr_y]:
-                minimal_vage = ARR_FIELD[i][curr_y]
+            if minimal_vage > PROTECTED_FIELD[i][curr_y]:
+                minimal_vage = PROTECTED_FIELD[i][curr_y]
         return minimal_vage
 
     def get_most_defended_x(self, curr_y):
         maximal_vage = -1
         for i in range(28):
-            if maximal_vage < ARR_FIELD[i][curr_y] < 500:
-                maximal_vage = ARR_FIELD[i][curr_y]
+            if maximal_vage < PROTECTED_FIELD[i][curr_y] < 500:
+                maximal_vage = PROTECTED_FIELD[i][curr_y]
         return maximal_vage
 
     def choose_best_tower_loco(self, game_state, ):
@@ -136,30 +149,55 @@ class AlgoStrategy(gamelib.AlgoCore):
             sum_of_loco = 0
             count_of_parts = 0
             for loco in location_in_range:
-                sum_of_loco += ARR_FIELD[loco[0]][loco[1]]
+                sum_of_loco += PROTECTED_FIELD[loco[0]][loco[1]]
                 count_of_parts += 1
-            sum_of_points.append(sum_of_loco / count_of_parts)
-        max_sum = 0
+            if count_of_parts == 0:
+                sum_of_points.append(1000)
+            else:
+                sum_of_points.append(sum_of_loco / count_of_parts)
+        min_sum = 1000
         index = 0
         for sum in sum_of_points:
-            if max_sum < sum:
+            if min_sum > sum:
                 index = sum_of_points.index(sum)
-                max_sum = sum
+                min_sum = sum
         return best_loco[index]
     """
     NOTE: All the methods after this point are part of the sample starter-algo
     strategy and can safely be replaced for your custom algo.
     """
-    def choose_place_of_support(self, game_state, support_location):
+    def choose_place_of_support(self, game_state):
         curr_y = 10
+        most_profitable_place = [13, 10]
         maximal_rate = self.get_most_defended_x(curr_y)
         best_loco = self.get_all_locations_line_by_rate(curr_y, maximal_rate)
         #TODO Summury score = coverage ration * price current structures
+        if len(best_loco) == 1:
+            return best_loco[0]
+
+        max_score = -1
+        answer = best_loco[0]
+        for location in best_loco:
+            ration = len(game_state.game_map.get_locations_in_range(location, 7)) / len(game_state.game_map.get_locations_in_range(most_profitable_place, 7))
+            price_struct = self.get_sum_of_walls_and_turrets_in_range(game_state, location, 7)
+            score = ration * price_struct
+            if max_score < score:
+                answer = location
+        return answer
+
+
+    def get_sum_of_walls_and_turrets_in_range(self, game_state, start_pos, range):
+        summa = 0
+        all_locations = game_state.game_map.get_locations_in_range(start_pos, range)
+        for location in all_locations:
+            if STRUCT_FIELD[location[0]][location[1]] != 0 and STRUCT_FIELD[location[0]][location[1]] != 4 and STRUCT_FIELD[location[0]][location[1]] != 8:
+                summa += STRUCT_FIELD[location[0]][location[1]]
+        return summa
 
     def get_all_locations_line_by_rate(self, curr_y, rate):
         best_loco = []
         for i in range(28):
-            if rate == ARR_FIELD[i][curr_y]:
+            if rate == PROTECTED_FIELD[i][curr_y]:
                 best_loco.append([i, rate])
         return best_loco
 
@@ -190,6 +228,9 @@ class AlgoStrategy(gamelib.AlgoCore):
                 else:
                     walls_placed.append(location)
         self.mark_def_point(game_state, turrels_placed)
+        self.map_units(game_state, walls_placed, WALL)
+        self.map_units(game_state, turrels_placed, TURRET)
+        self.map_units(game_state, supports_placed, SUPPORT)
         if self.get_less_defended_rating() != 0:
             self.build_neeeded_walls(game_state, walls_placed, turrels_placed)
         else:
@@ -202,11 +243,19 @@ class AlgoStrategy(gamelib.AlgoCore):
             best_loco = self.choose_best_tower_loco(game_state)
             if best_loco[0] == -1:
                 break
-            game_state.attempt_spawn(TURRET, best_loco)
-            game_state.attempt_upgrade(best_loco)
+            self.spawn_and_mark(game_state, best_loco, TURRET)
+            self.upgrade_and_mark(game_state, best_loco, TURRET)
             self.place_walls_close_to_turrles(game_state, best_loco)
             if sp_in_start_round == game_state.get_resource(SP):
                 break
+
+        if game_state.get_resource(SP) >= 13:
+            support_loco = self.choose_place_of_support(game_state)
+            self.spawn_and_mark(game_state, support_loco, SUPPORT)
+            self.upgrade_and_mark(game_state, support_loco, SUPPORT)
+            wall_loco = [[[support_loco[0] + 1], [support_loco[1]]], [[support_loco[0] - 1], [support_loco[1]]]]
+            self.spawn_and_mark(game_state, wall_loco, WALL)
+            self.upgrade_and_mark(game_state, wall_loco, WALL)
 
         if game_state.get_resource(MP) >= 9:
             self.demolisher_line_strategy(game_state)
@@ -215,12 +264,66 @@ class AlgoStrategy(gamelib.AlgoCore):
     def place_walls_close_to_turrles(self, game_state, turret):
         turret[1] += 1
         turret[0] += 1
-        game_state.attempt_spawn(WALL, turret)
-        game_state.attempt_upgrade(turret)
+        self.spawn_and_mark(game_state, turret, WALL)
+        self.upgrade_and_mark(game_state, turret, WALL)
         turret[0] -= 2
-        game_state.attempt_spawn(WALL, turret)
-        game_state.attempt_upgrade(turret)
+        self.spawn_and_mark(game_state, turret, WALL)
+        self.upgrade_and_mark(game_state, turret, WALL)
 
+    def is_unit_upgrade(self, game_state, location):
+        for unit in game_state.game_map[location[0], location[1]]:
+            if unit.stationary:
+                existing_unit = unit
+        return existing_unit.upgraded
+
+    def make_false_array_real(self, array):
+        gamelib.util.debug_write("In make false real")
+        gamelib.util.debug_write(array)
+        real_array = []
+        try:
+            for unit in array:
+                gamelib.util.debug_write(str(unit[0]))
+                break
+            real_array = array
+        except TypeError:
+            real_array.append(array)
+        return real_array
+
+    def map_units(self, game_state, unit_array, unit_type):
+        real_array = self.make_false_array_real(unit_array)
+        regular_cost = 0
+        upgrade_cost = 0
+        if unit_type == WALL:
+            regular_cost = 1
+            upgrade_cost = 3
+        else:
+            if unit_type == TURRET:
+                regular_cost = 2
+                upgrade_cost = 6
+            else:
+                regular_cost = 4
+                upgrade_cost = 8
+        for unit in real_array:
+            if self.is_unit_upgrade(game_state, unit):
+                STRUCT_FIELD[unit[0]][unit[1]] = upgrade_cost
+            else:
+                STRUCT_FIELD[unit[0]][unit[1]] = regular_cost
+
+    def spawn_and_mark(self, game_state, unit_array, unit_type):
+        gamelib.util.debug_write("In spawn and mark")
+        real_array = self.make_false_array_real(unit_array)
+        gamelib.util.debug_write(real_array)
+        for unit in real_array:
+            if game_state.attempt_spawn(unit_type, unit) > 1:
+                self.map_units(game_state, unit, unit_type)
+
+    def upgrade_and_mark(self, game_state, unit_array, unit_type):
+        gamelib.util.debug_write("In upgrade and mark")
+        real_array = self.make_false_array_real(unit_array)
+        gamelib.util.debug_write(real_array)
+        for unit in real_array:
+            if game_state.attempt_upgrade(unit) > 0:
+                self.map_units(game_state, unit, unit_type)
 
     def build_defences(self, game_state):
         """
@@ -235,16 +338,12 @@ class AlgoStrategy(gamelib.AlgoCore):
         wall_updates = [[13, 12], [3, 12]]
         wall_locations = [[0, 13], [1, 13], [26, 13], [27, 13], [24, 12]]
         #support_locations = []
-        # attempt_spawn will try to spawn units if we have resources, and will check if a blocking unit is already there
-        game_state.attempt_spawn(TURRET, turret_locations)
-        #game_state.attempt_spawn(SUPPORT, support_locations)
 
-        # Place walls in front of turrets to soak up damage for them
-        game_state.attempt_spawn(WALL, wall_locations)
-        game_state.attempt_spawn(WALL, wall_updates)
-        # upgrade walls so they soak more damage
-        game_state.attempt_upgrade(wall_updates)
-        game_state.attempt_upgrade(turret_locations)
+        self.spawn_and_mark(game_state, turret_locations, TURRET)
+        self.spawn_and_mark(game_state, wall_locations, WALL)
+        self.spawn_and_mark(game_state, wall_updates, WALL)
+        self.upgrade_and_mark(game_state, wall_updates, WALL)
+        self.upgrade_and_mark(game_state, turret_locations, TURRET)
 
 
     def build_reactive_defense(self, game_state):
