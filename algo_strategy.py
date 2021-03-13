@@ -109,9 +109,10 @@ class AlgoStrategy(gamelib.AlgoCore):
         self.map_units(game_state, turrels_placed, TURRET)
         self.map_units(game_state, supports_placed, SUPPORT)
         #TODO remove or change function of building needed wals
+        curr_y = 10
         self.defend_edges(game_state)
-        self.build_neeeded_walls(game_state, turrels_placed)
-        if self.get_less_defended_rating() <= 1:
+        self.build_neeeded_walls(game_state, curr_y)
+        if self.get_less_defended_rating(curr_y) <= 1:
             game_state.attempt_spawn(INTERCEPTOR, [22, 8], 1)
             game_state.attempt_spawn(INTERCEPTOR, [5, 8], 1)
 
@@ -121,15 +122,15 @@ class AlgoStrategy(gamelib.AlgoCore):
             struct_coeff = len(supports_placed) / len(turrels_placed)
         else:
             struct_coeff = 1
-        if (self.get_less_defended_rating() < 3 or struct_coeff >= 0.5) or (len(turrels_placed) > 18 and struct_coeff >= 0.75):
-            best_loco = self.choose_best_tower_loco(game_state)
+        if (self.get_less_defended_rating(curr_y) < 3 or struct_coeff >= 0.5) or (len(turrels_placed) > 18 and struct_coeff >= 0.75):
+            best_loco = self.choose_best_tower_loco(game_state, curr_y)
             if game_state.get_resource(SP) >= 10 and best_loco[0] != -1:
                 self.spawn_and_mark(game_state, best_loco, TURRET)
                 self.upgrade_and_mark(game_state, best_loco, TURRET)
                 self.place_wall_close_to_turrles(game_state, best_loco)
         else:
             if game_state.get_resource(SP) >= 8:
-                support_loco = self.choose_place_of_support(game_state)
+                support_loco = self.choose_place_of_support(game_state, curr_y - 1)
                 gamelib.util.debug_write("      Answer is :")
                 gamelib.util.debug_write(str(support_loco))
                 self.spawn_and_mark(game_state, support_loco, SUPPORT)
@@ -242,17 +243,16 @@ class AlgoStrategy(gamelib.AlgoCore):
             PROTECTED_FIELD[loco[0]][loco[1]] += 1
         return True
 
-    def build_neeeded_walls(self, game_state, turrets_placed):
+    def build_neeeded_walls(self, game_state, curr_y):
         walls_built = [[25, 13], [2, 13], [2, 12], [25, 12]]
         for x in range(28):
-            if STRUCT_FIELD[x][11] != 0 and STRUCT_FIELD[x][11] > -1:
-                walls_built.append([x, 12])
+            if STRUCT_FIELD[x][curr_y] == 2 or STRUCT_FIELD[x][curr_y] == 6:
+                walls_built.append([x, curr_y + 1])
         self.spawn_and_mark(game_state, walls_built, WALL)
         game_state.attempt_remove(walls_built)
 
-    def get_less_defended_rating(self):
+    def get_less_defended_rating(self, curr_y):
         minimal_vage = 100
-        curr_y = 11
         answer = []
         for i in range(28):
             answer.append(PROTECTED_FIELD[i][curr_y])
@@ -271,10 +271,8 @@ class AlgoStrategy(gamelib.AlgoCore):
         gamelib.util.debug_write(str(answer))
         return maximal_vage
 
-    def choose_best_tower_loco(self, game_state, ):
-        minimal_vage = self.get_less_defended_rating()
-        curr_y = 11
-
+    def choose_best_tower_loco(self, game_state, curr_y):
+        minimal_vage = self.get_less_defended_rating(curr_y)
         best_loco = self.get_all_locations_line_by_rate(curr_y, minimal_vage)
         #TODO Remove try block, bug cause of wrong ARR_FIELD some param
         try:
@@ -307,8 +305,7 @@ class AlgoStrategy(gamelib.AlgoCore):
                 min_sim = sum
         return best_loco[index]
 
-    def choose_place_of_support(self, game_state):
-        curr_y = 10
+    def choose_place_of_support(self, game_state, curr_y):
         most_profitable_place = [13, 10]
         maximal_rate = self.get_most_defended_x(curr_y)
         gamelib.util.debug_write("      Most defended x")
@@ -448,18 +445,20 @@ class AlgoStrategy(gamelib.AlgoCore):
             return True
 
         if game_state.turn_number == 6:
-            new_turrets = [[7, 11], [11, 11], [16, 11]]
+            new_turrets = [[10, 10], [14, 10], [17, 10]]
             self.spawn_and_mark(game_state, new_turrets, TURRET)
             self.upgrade_and_mark(game_state, new_turrets, TURRET)
-            game_state.attempt_spawn(INTERCEPTOR, [22, 8], 2)
+            game_state.attempt_spawn(INTERCEPTOR, [23, 9], 1)
+            game_state.attempt_spawn(INTERCEPTOR, [4, 9], 1)
             return True
 
         if game_state.turn_number == 7:
-            new_walls = [[4, 12], [7, 12], [11, 12], [16, 12], [23, 12]]
+            new_walls = [[6, 11], [10, 11], [14, 11], [17, 10], [21, 11]]
             self.spawn_and_mark(game_state, new_walls, WALL)
             upgr_walls = [[26, 13], [1, 13]]
             self.upgrade_and_mark(game_state, upgr_walls, WALL)
-            game_state.attempt_spawn(INTERCEPTOR, [22, 8], 2)
+            game_state.attempt_spawn(INTERCEPTOR, [23, 9], 1)
+            game_state.attempt_spawn(INTERCEPTOR, [4, 9], 1)
             game_state.attempt_remove([[1, 12], [26, 12]])
             return True
 
@@ -508,30 +507,31 @@ class AlgoStrategy(gamelib.AlgoCore):
                     self.spawn_and_mark(game_state, [21, 9], SUPPORT)
 
             if game_state.turn_number == 3:
-                if self.is_unit_placed(game_state, [23, 11]):
-                    self. upgrade_and_mark(game_state, [23, 11], TURRET)
+                if self.is_unit_placed(game_state, [21, 10]):
+                    self. upgrade_and_mark(game_state, [21, 10], TURRET)
                 else:
-                    self.spawn_and_mark(game_state, [23, 11], TURRET)
+                    self.spawn_and_mark(game_state, [21, 10], TURRET)
 
-                if self.is_unit_placed(game_state, [4, 11]):
-                    self. upgrade_and_mark(game_state, [4, 11], TURRET)
+                if self.is_unit_placed(game_state, [6, 10]):
+                    self. upgrade_and_mark(game_state, [6, 10], TURRET)
                 else:
-                    self.spawn_and_mark(game_state, [4, 11], TURRET)
+                    self.spawn_and_mark(game_state, [6, 10], TURRET)
 
 
             if game_state.turn_number == 5:
-                removing_turrets = [[6, 10], [9, 10], [11, 9], [16, 9], [18, 10], [21, 10]]
+                removing_turrets = [[4, 11], [9, 10], [11, 9], [16, 9], [23, 11], [18, 10]]
                 game_state.attempt_remove(removing_turrets)
             return True
 
     def build_the_pass(self, game_state):
-        left_x = 10
+        left_x = 12
         reight_x = 15
         curr_y = 10
-        bottom_y = 3
-        while (self.is_unit_placed(game_state, [left_x, curr_y]) or self.is_unit_placed(game_state, [reight_x, curr_y]) )and curr_y >= bottom_y:
+        bottom_y = 4
+        while (self.is_unit_placed(game_state, [left_x, curr_y]) and self.is_unit_placed(game_state, [reight_x, curr_y])) and curr_y >= bottom_y:
             curr_y -= 1
         self.spawn_and_mark(game_state, [[left_x, curr_y], [reight_x, curr_y]], SUPPORT)
+        self.upgrade_and_mark(game_state, [[left_x, curr_y], [reight_x, curr_y]], SUPPORT)
 
 if __name__ == "__main__":
     algo = AlgoStrategy()
