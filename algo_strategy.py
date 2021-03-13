@@ -154,7 +154,7 @@ class AlgoStrategy(gamelib.AlgoCore):
                 filtered.append(location)
         return filtered
 
-    def get_blocked_locations(selfs, locations, game_state):
+    def get_blocked_locations(self, locations, game_state):
         filtered = []
         for location in locations:
             if game_state.contains_stationary_unit(location):
@@ -532,6 +532,91 @@ class AlgoStrategy(gamelib.AlgoCore):
             curr_y -= 1
         self.spawn_and_mark(game_state, [[left_x, curr_y], [reight_x, curr_y]], SUPPORT)
         self.upgrade_and_mark(game_state, [[left_x, curr_y], [reight_x, curr_y]], SUPPORT)
+
+    def spawn_interceptors(self, game_state):
+        holes = self.find_least_secured_locations(game_state, [9, 10, 11])
+        starting_points = self.find_best_interceptor_starting_points(game_state, holes)
+        game_state.attempt_spawn(INTERCEPTOR, starting_points[0])
+        for i in range(5 - len(starting_points[0])):
+            game_state.attempt_spawn(INTERCEPTOR, starting_points[1][i])
+
+    def find_least_secured_locations(self, game_state, y_list):
+        min_rating = 100
+        min_y_list = []
+        for y in y_list:
+            cur_rating = self.get_less_defended_rating(y)
+            if min_rating == cur_rating:
+                min_y_list.append(y)
+            elif min_rating > cur_rating:
+                min_rating = cur_rating
+                min_y_list = [y]
+
+        res = []
+        for y in min_y_list:
+            res += self.get_all_locations_line_by_rate(y, min_rating)
+
+        return res
+    
+    def find_best_interceptor_starting_points(self, game_state, least_secured):
+        """Potentially very slow"""
+        # get unblocked edge locations
+        edge_locations = game_state.game_map.edge_locations(game_state.game_map.BOTTOM_LEFT) + game_state.game_map.get_edge_locations(game_state.game_map.BOTTOM_RIGHT)
+        edge_locations = self.filter_blocked_locations(edge_locations, game_state)
+        # ckeck coverage of every possible path
+        coverage_list = [[]] * len(least_secured)
+        for loc in edge_locations:
+            self.update_coverage(game_state, loc, least_secured, coverage_list)
+        # filter from unreachable points
+        coverage_list = [x for x in filter(lambda x: len(x) > 0, coverage_list)]
+        coverage_list.sort(lambda x: len(x))
+        # get starting locations
+        res = [[], []]
+        while len(coverage_list) > 0:
+            if len(coverage_list[0]) == 1:
+                res[0].append(coverage_list[0][0])
+                coverage_list = self.filter_from_covered(coverage_list, coverage_list[0][0])
+            else:
+                point = self.find_most_covering(coverage_list)
+                res[1].append(point)
+                coverage_list = self.filter_from_covered(coverage_list, point)
+
+        return res
+
+    def update_coverage(self, game_state, starting_location, locations_to_cover, coverage_list):
+        path = game_state.find_path_to_edge(starting_location)
+        for p in path:
+            covered = game_state.game_map.get_locations_in_range(p, 4.5)
+            for i in range(len(locations_to_cover)):
+                if locations_to_cover[i] in covered:
+                    coverage_list[i].append(starting_location)        
+    
+    def filter_from_covered(self, coverage_list, starting_loc):
+        res = []
+        for cov in coverage_list:
+            if starting_loc not in cov:
+                res.append(cov)
+
+        return res
+    
+    def find_most_covering(self, coverage_list):
+        points_set = {}
+        for cov in coverage_list:
+            points_set.update(cov)
+        res = []
+        max_count = 0
+        for p in points_set:
+            count = 0
+            # get covered points count
+            for cov in coverage_list:
+                if p in cov:
+                    count += 1
+            # update list
+            if count > max_count:
+                res = p
+                max_count = count
+
+        return res
+
 
 if __name__ == "__main__":
     algo = AlgoStrategy()
