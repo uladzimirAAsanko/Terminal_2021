@@ -568,7 +568,7 @@ class AlgoStrategy(gamelib.AlgoCore):
             self.update_coverage(game_state, loc, least_secured, coverage_list)
         # filter from unreachable points
         coverage_list = [x for x in filter(lambda x: len(x) > 0, coverage_list)]
-        coverage_list.sort(lambda x: len(x))
+        coverage_list.sort(key=lambda x: len(x))
         # get starting locations
         res = [[], []]
         while len(coverage_list) > 0:
