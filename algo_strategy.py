@@ -536,7 +536,7 @@ class AlgoStrategy(gamelib.AlgoCore):
     def spawn_interceptors(self, game_state, count):
         holes = self.find_least_secured_locations(game_state, [9, 10, 11])
         starting_points = self.find_best_interceptor_starting_points(game_state, holes)
-        if count >= starting_points[0]:
+        if count >= len(starting_points[0]):
             game_state.attempt_spawn(INTERCEPTOR, starting_points[0])
             i = 0
             while i <= (count - len(starting_points[0])):
@@ -630,6 +630,12 @@ class AlgoStrategy(gamelib.AlgoCore):
                 max_count = count
 
         return res
+
+    def get_edge_by_x_coord(self, game_state, x):
+        edge = game_state.game_map.BOTTOM_RIGHT if x > game_state.game_map.HALF_ARENA else game_state.game_map.BOTTOM_LEFT
+        edge_locations = game_state.game_map.get_edge_locations(edge)
+        edge_y = filter(lambda item: item[0] == x, edge_locations)
+        return list(edge_y)[0][1]
 
 
 if __name__ == "__main__":
