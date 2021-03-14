@@ -533,14 +533,30 @@ class AlgoStrategy(gamelib.AlgoCore):
         self.spawn_and_mark(game_state, [[left_x, curr_y], [reight_x, curr_y]], SUPPORT)
         self.upgrade_and_mark(game_state, [[left_x, curr_y], [reight_x, curr_y]], SUPPORT)
 
-    def spawn_interceptors(self, game_state):
+    def spawn_interceptors(self, game_state, count):
         holes = self.find_least_secured_locations(game_state, [9, 10, 11])
         starting_points = self.find_best_interceptor_starting_points(game_state, holes)
-        game_state.attempt_spawn(INTERCEPTOR, starting_points[0])
-        for i in range(5 - len(starting_points[0])):
-            game_state.attempt_spawn(INTERCEPTOR, starting_points[1][i])
+        if count >= starting_points[0]:
+            game_state.attempt_spawn(INTERCEPTOR, starting_points[0])
+            i = 0
+            while i <= (count - len(starting_points[0])):
+                game_state.attempt_spawn(INTERCEPTOR, starting_points[1][i % len(starting_points[1])])
+                i += 1
+        else:
+            while i <= count:
+                game_state.attempt_spawn(INTERCEPTOR, starting_points[0][i % len(starting_points[0])])
+                i += 1
 
     def find_least_secured_locations(self, game_state, y_list):
+        min_rating, min_y_list=  self.find_least_secured_lines(game_state, y_list)
+
+        res = []
+        for y in min_y_list:
+            res += self.get_all_locations_line_by_rate(y, min_rating)
+
+        return res
+    
+    def find_least_secured_lines(self, game_state, y_list):
         min_rating = 100
         min_y_list = []
         for y in y_list:
@@ -551,11 +567,7 @@ class AlgoStrategy(gamelib.AlgoCore):
                 min_rating = cur_rating
                 min_y_list = [y]
 
-        res = []
-        for y in min_y_list:
-            res += self.get_all_locations_line_by_rate(y, min_rating)
-
-        return res
+        return (min_rating, min_y_list)
     
     def find_best_interceptor_starting_points(self, game_state, least_secured):
         """Potentially very slow"""
