@@ -599,20 +599,22 @@ class AlgoStrategy(gamelib.AlgoCore):
         return res
     
     def find_most_covering(self, coverage_list):
-        points_set = {}
+        points_set = set()
         for cov in coverage_list:
-            points_set.update(cov)
+            for item in cov:
+                points_set.add(tuple(item))
         res = []
         max_count = 0
         for p in points_set:
             count = 0
+            point = list(p)
             # get covered points count
             for cov in coverage_list:
-                if p in cov:
+                if point in cov:
                     count += 1
             # update list
             if count > max_count:
-                res = p
+                res = point
                 max_count = count
 
         return res
